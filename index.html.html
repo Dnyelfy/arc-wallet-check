@@ -247,7 +247,8 @@ async function runCheck() {
 
   try {
     let txCount = 0, tokenTransfers = 0, balance = 0, ageDays = 0, lastDays = null,
-        distinct = 0, deployed = false, methods = 0, gotApi = false;
+        distinct = 0, deployed = false, methods = 0, gotApi = false,
+        didSwap = false, didBridge = false, didMint = false, didRegister = false, nftCount = 0;
 
     let allStamps = [], fetched = 0;
     // --- Blockscout API (rich data) ---
@@ -286,10 +287,23 @@ async function runCheck() {
         if (!isOut) continue;
         if (t.to && t.to.is_contract) tos.add(t.to.hash.toLowerCase());
         if (!t.to) deployed = true;
-        if (t.method) mset.add(t.method);
+        if (t.method) mset.add(String(t.method).toLowerCase());
         if ((t.transaction_types || t.tx_types || []).includes("contract_creation")) deployed = true;
       }
       distinct = tos.size; methods = mset.size;
+
+      // action signals from method names
+      const has = (...keys) => [...mset].some(m => keys.some(k => m.includes(k)));
+      didSwap = has("swap", "exactinput", "exactoutput", "trade");
+      didBridge = has("bridge", "depositfor", "sendmessage", "relay", "cctp", "burnlocked");
+      didMint = has("mint", "claim");
+      didRegister = has("register", "setname", "commit");
+
+      // NFT / domain holdings
+      try {
+        const nft = await getJson(`${API}/addresses/${addr}/tokens?type=ERC-721`);
+        nftCount = (nft.items || []).length;
+      } catch (_) { nftCount = 0; }
     } catch (e) {
       // --- RPC fallback (basic data) ---
       const [cnt, bal] = await Promise.all([
@@ -304,14 +318,18 @@ async function runCheck() {
 
     // --- Score ---
     let score = 0;
-    score += Math.min(30, txCount * 1.2);                          // volume
-    score += Math.min(15, ageDays * 0.5);                          // age
-    if (lastDays !== null) score += lastDays <= 3 ? 12 : lastDays <= 7 ? 8 : lastDays <= 30 ? 4 : 0; // recency
-    score += Math.min(15, distinct * 3);                           // diversity
-    score += Math.min(8, tokenTransfers * 0.8);                    // tokens
-    if (deployed) score += 10;                                     // builder
-    if (balance > 0.5) score += 5;                                 // funded
-    score += Math.min(5, methods);                                 // method variety
+    score += Math.min(24, txCount * 1.2);                          // volume
+    score += Math.min(12, ageDays * 0.5);                          // age
+    if (lastDays !== null) score += lastDays <= 3 ? 10 : lastDays <= 7 ? 7 : lastDays <= 30 ? 3 : 0; // recency
+    score += Math.min(12, distinct * 2.5);                         // diversity
+    score += Math.min(7, tokenTransfers * 0.7);                    // tokens
+    if (deployed) score += 8;                                      // builder
+    if (balance > 0.5) score += 4;                                 // funded
+    score += Math.min(4, methods);                                 // method variety
+    if (didSwap) score += 5;                                       // swap user
+    if (didBridge) score += 5;                                     // bridge user
+    if (didMint) score += 3;                                       // mint/claim
+    if (didRegister || nftCount > 0) score += 6;                   // domain/NFT holder
     score = Math.max(0, Math.min(100, Math.round(score)));
 
     const tier = score >= 80 ? ["⚡ Power User", "#19e3b1"]
@@ -354,6 +372,18 @@ async function runCheck() {
       item(ageDays >= 30 ? "ok" : ageDays >= 7 ? "part" : "miss",
         `Wallet age — ${ageDays} day(s)`,
         "Older wallets read as genuine users, not last-minute farmers. Keep the streak alive.");
+      item(didSwap ? "ok" : "miss",
+        didSwap ? "Swap activity detected ✓" : "No swap activity",
+        "Use a DEX/FX swap on Arc at least once — swaps are a classic airdrop signal.");
+      item(didBridge ? "ok" : "miss",
+        didBridge ? "Bridge activity detected ✓" : "No bridge activity",
+        "Bridge assets in/out (e.g. CCTP / thirdweb bridge) to show cross-chain usage.");
+      item(didMint ? "ok" : "miss",
+        didMint ? "Mint/claim activity detected ✓" : "No mint or claim activity",
+        "Mint an NFT (OmniHub) or claim from a faucet/dApp to diversify your actions.");
+      item(nftCount > 0 || didRegister ? "ok" : "miss",
+        nftCount > 0 ? `NFT / domain holder — ${nftCount} collection(s) ✓` : "No NFT or Arc name found",
+        "Register an Arc name (InfinityName) or hold an NFT — identity signals score well.");
     }
     item(balance >= 1 ? "ok" : "miss",
       `Gas balance — ${balance.toFixed(2)} USDC`,
