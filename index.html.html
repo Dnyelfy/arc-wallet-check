@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Arc Wallet Check — Score Your Onchain Activity</title>
+<meta name="description" content="Paste any Arc Testnet address and get a 0-100 wallet quality score, a what's-missing checklist, and an airdrop simulator. Built on Arc Network." />
+<meta property="og:title" content="Arc Wallet Check — Score Your Onchain Activity" />
+<meta property="og:description" content="Wallet quality score, missing-activity checklist & airdrop simulator for Arc Testnet." />
+<meta name="twitter:card" content="summary_large_image" />
+<style>
+  :root {
+    --bg: #060d14;
+    --card: #0c1622;
+    --line: #1b2a3d;
+    --ink: #e8f0f8;
+    --mut: #7d93aa;
+    --acc: #25c2ff;
+    --acc2: #19e3b1;
+    --bad: #ff6b8a;
+    --warn: #ffc24d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(900px 480px at 80% -10%, #0d2c44 0%, transparent 60%),
+      radial-gradient(700px 400px at -10% 30%, #0a2a23 0%, transparent 55%),
+      var(--bg);
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 16px 70px; }
+
+  header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 26px; }
+  .brand { display: flex; gap: 12px; align-items: center; }
+  .scanner {
+    width: 42px; height: 42px; border-radius: 12px; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #0e3a55, #0c4438);
+    border: 1px solid var(--line);
+  }
+  .scanner::after {
+    content: ""; position: absolute; left: 0; right: 0; height: 2px;
+    background: var(--acc2); box-shadow: 0 0 10px var(--acc2);
+    animation: scan 2.2s ease-in-out infinite;
+  }
+  @keyframes scan { 0%,100% { top: 6px; } 50% { top: 34px; } }
+  h1 { font-size: 21px; margin: 0; }
+  h1 b { background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { font-size: 12px; color: var(--mut); margin-top: 2px; }
+  .pill { font-size: 11px; border: 1px solid var(--line); background: var(--card); color: var(--mut); border-radius: 999px; padding: 6px 12px; }
+
+  .search { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .search input {
+    flex: 1; min-width: 240px; background: var(--card); border: 1px solid var(--line);
+    color: var(--ink); border-radius: 12px; padding: 13px 14px; font-size: 14px; font-family: monospace;
+  }
+  .search input:focus { outline: none; border-color: var(--acc); }
+  button {
+    border: none; border-radius: 12px; padding: 12px 18px; font-size: 14px; cursor: pointer;
+    background: linear-gradient(135deg, #0a84c4, #0bbf93); color: #fff; font-weight: 600;
+  }
+  button.ghost { background: var(--card); border: 1px solid var(--line); color: var(--mut); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--mut); margin: 0 0 22px; }
+  .hint a { color: var(--acc); text-decoration: none; }
+
+  .status { font-size: 13px; color: var(--acc); margin-bottom: 16px; min-height: 18px; }
+  .status.err { color: var(--bad); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 14px; }
+  h2 { font-size: 15px; margin: 0 0 14px; }
+  .hidden { display: none; }
+
+  .subs { margin-top: 18px; }
+  .subs h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--mut); margin: 0 0 10px; }
+  .sb { margin-bottom: 10px; }
+  .sb .lbl { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .sb .lbl b { color: #e8f1fa; font-weight: 600; }
+  .sb .track { height: 8px; border-radius: 6px; background: #0f1c2c; overflow: hidden; }
+  .sb .fill { height: 100%; border-radius: 6px; transition: width .8s ease; }
+  .scorebox { display: flex; gap: 26px; align-items: center; flex-wrap: wrap; }
+  .gauge { position: relative; width: 150px; height: 150px; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge .num b { font-size: 38px; }
+  .gauge .num span { font-size: 11px; color: var(--mut); }
+  .tier { font-size: 13px; padding: 4px 12px; border-radius: 999px; display: inline-block; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 10px; flex: 1; min-width: 260px; }
+  .m { background: #081019; border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; }
+  .m b { display: block; font-size: 19px; }
+  .m span { font-size: 11px; color: var(--mut); }
+
+  .check { list-style: none; margin: 0; padding: 0; }
+  .check li {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: #081019; margin-bottom: 8px; font-size: 13.5px; line-height: 1.45;
+  }
+  .check .ico { font-size: 15px; line-height: 1.4; }
+  .check li.ok { border-color: #14503f; }
+  .check li.miss { border-color: #5a2233; }
+  .check li.part { border-color: #5a4a1e; }
+  .check small { color: var(--mut); display: block; }
+
+  .sim label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--mut); margin: 14px 0 6px; }
+  .sim label b { color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--acc2); }
+  .simout {
+    margin-top: 18px; padding: 16px; border-radius: 12px; text-align: center;
+    background: linear-gradient(135deg, #0a2236, #0a2c25); border: 1px solid var(--line);
+  }
+  .simout b { font-size: 26px; background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .simout p { margin: 6px 0 0; font-size: 11px; color: var(--mut); }
+
+  .sharebtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .hcell { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  #heatmap > div { display: grid; grid-template-rows: repeat(7, 1fr); gap: 4px; }
+  #heatmap .d { width: 100%; aspect-ratio: 1; border-radius: 3px; background: #0f1c2c; }
+  footer { text-align: center; font-size: 12px; color: var(--mut); margin-top: 30px; line-height: 1.8; }
+  footer a { color: var(--acc); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="scanner"></div>
+      <div>
+        <h1>Arc <b>Wallet Check</b></h1>
+        <div class="sub">Score your onchain activity · Arc Testnet</div>
+      </div>
+    </div>
+    <span class="pill">Chain ID 5042002 · USDC gas</span>
+  </header>
+
+  <div class="search">
+    <input id="addr" placeholder="0x… paste any Arc address" spellcheck="false" />
+    <button id="checkBtn" onclick="runCheck()">Check</button>
+    <button class="ghost" onclick="useMyWallet()">Use my wallet</button>
+  </div>
+  <p class="hint">Reads public data from <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer">ArcScan</a> — no wallet connection or signature needed.</p>
+
+  <div id="status" class="status"></div>
+
+  <section id="result" class="card hidden">
+    <h2>Wallet Quality Score</h2>
+    <div class="scorebox">
+      <div class="gauge">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="62" stroke="#15243a" stroke-width="13" fill="none"/>
+          <circle id="arc" cx="75" cy="75" r="62" stroke="url(#gg)" stroke-width="13" fill="none"
+                  stroke-linecap="round" stroke-dasharray="389.5" stroke-dashoffset="389.5"
+                  style="transition: stroke-dashoffset 1.2s ease"/>
+          <defs>
+            <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#25c2ff"/><stop offset="100%" stop-color="#19e3b1"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="num"><b id="scoreNum">0</b><span>/ 100</span><span id="tier" class="tier"></span></div>
+      </div>
+      <div class="grid">
+        <div class="m"><b id="mTx">–</b><span>Transactions</span></div>
+        <div class="m"><b id="mAge">–</b><span>Wallet age (days)</span></div>
+        <div class="m"><b id="mLast">–</b><span>Days since last tx</span></div>
+        <div class="m"><b id="mCp">–</b><span>Distinct contracts</span></div>
+        <div class="m"><b id="mTok">–</b><span>Token transfers</span></div>
+        <div class="m"><b id="mBal">–</b><span>USDC balance</span></div>
+      </div>
+    </div>
+    <div class="sharebtns">
+      <button id="shareBtn" onclick="shareX()">Share my score on 𝕏</button>
+      <button class="ghost" onclick="downloadCard()">Download score card 🖼</button>
+      <button class="ghost" onclick="stampOnChain()">Stamp score on-chain ⛓</button>
+      <button class="ghost" onclick="exportCSV()">Export CSV 📄</button>
+      <button class="ghost" onclick="copyCard()">Copy result</button>
+    </div>
+    <div id="subscores" class="subs hidden">
+      <h3>Score breakdown</h3>
+      <div id="subBars"></div>
+    </div>
+  </section>
+
+  <section id="heatmapCard" class="card hidden">
+    <h2>Activity heatmap <span style="font-size:11px;color:var(--mut)">last 12 weeks · <span id="hmNote"></span></span></h2>
+    <div id="heatmap" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;"></div>
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:var(--mut);margin-top:8px;">
+      less <span class="hcell" style="background:#0f1c2c"></span><span class="hcell" style="background:#0e3a55"></span><span class="hcell" style="background:#0d6d6e"></span><span class="hcell" style="background:#19e3b1"></span> more
+    </div>
+  </section>
+
+  <section id="missing" class="card hidden">
+    <h2>What's missing? — Airdrop readiness checklist</h2>
+    <ul id="checklist" class="check"></ul>
+  </section>
+
+  <section id="simulator" class="card hidden sim">
+    <h2>Airdrop Simulator <span style="font-size:11px;color:var(--mut)">(hypothetical — not official)</span></h2>
+    <label>Assumed FDV of the network <b id="fdvVal">$500M</b></label>
+    <input type="range" id="fdv" min="100" max="3000" step="100" value="500" oninput="simulate()" />
+    <label>Share of supply airdropped <b id="pctVal">5%</b></label>
+    <input type="range" id="pct" min="1" max="15" step="1" value="5" oninput="simulate()" />
+    <label>Eligible wallets <b id="walVal">200K</b></label>
+    <input type="range" id="wal" min="50" max="1000" step="50" value="200" oninput="simulate()" />
+    <div class="simout">
+      <div style="font-size:12px;color:var(--mut)">Simulated allocation for this wallet</div>
+      <b id="simOut">$0</b>
+      <p>Pure speculation based on your score vs. an average wallet. Nobody knows real airdrop criteria. DYOR.</p>
+    </div>
+  </section>
+
+  <footer>
+    Built by <a href="https://x.com/Dnyelfy" target="_blank" rel="noreferrer">@Dnyelfy</a> · Arc Testnet · data via <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer">ArcScan</a><br/>
+    Also try <a href="https://arcvote-one.vercel.app/arc-dapp.html" target="_blank" rel="noreferrer">ArcVote → onchain governance on Arc</a>
+  </footer>
+</div>
+
+<script>
+const API = "https://testnet.arcscan.app/api/v2";
+const RPC = "https://rpc.testnet.arc.network";
+const CIRC = 389.5;
+let lastResult = null;
+let allTxs = [];
+let lastSubs = [];
+
+function exportCSV() {
+  if (!lastResult) return;
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = [];
+  lines.push("Arc Wallet Check — Export");
+  lines.push(`Address,${esc(lastResult.addr)}`);
+  lines.push(`Score,${lastResult.score}/100`);
+  lines.push(`Tier,${esc(lastResult.tier)}`);
+  for (const s of lastSubs) lines.push(`${esc(s.name)},${s.val}/100`);
+  lines.push(`Transactions,${lastResult.txCount}`);
+  lines.push(`Wallet age (days),${lastResult.ageDays}`);
+  lines.push(`Token transfers,${lastResult.tokenTransfers}`);
+  lines.push(`USDC balance,${lastResult.balance.toFixed(2)}`);
+  lines.push("");
+  if (allTxs.length) {
+    lines.push("hash,date,from,to,method,value_usdc,status");
+    for (const t of allTxs)
+      lines.push([t.hash, t.date, t.from, t.to, t.method, t.valueUSDC, t.status].map(esc).join(","));
+  } else {
+    lines.push("(transaction list unavailable — explorer API offline)");
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `arc-wallet-${lastResult.addr.slice(0, 8)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const $ = (id) => document.getElementById(id);
+
+function setStatus(msg, err) {
+  const s = $("status");
+  s.textContent = msg || "";
+  s.className = "status" + (err ? " err" : "");
+}
+
+function useMyWallet() {
+  if (!window.ethereum) { setStatus("MetaMask not found — paste an address instead.", true); return; }
+  window.ethereum.request({ method: "eth_requestAccounts" })
+    .then(a => { $("addr").value = a[0]; runCheck(); })
+    .catch(() => setStatus("Wallet connection rejected.", true));
+}
+
+async function rpcCall(method, params) {
+  const r = await fetch(RPC, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+  });
+  const j = await r.json();
+  return j.result;
+}
+
+async function getJson(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+async function runCheck() {
+  const addr = $("addr").value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) { setStatus("Invalid address — must be 0x + 40 hex chars.", true); return; }
+  $("checkBtn").disabled = true;
+  setStatus("Scanning Arc Testnet…");
+  ["result","missing","simulator"].forEach(id => $(id).classList.add("hidden"));
+
+  try {
+    let txCount = 0, tokenTransfers = 0, balance = 0, ageDays = 0, lastDays = null,
+        distinct = 0, deployed = false, methods = 0, gotApi = false,
+        didSwap = false, didBridge = false, didMint = false, didRegister = false, nftCount = 0;
+
+    let allStamps = [], fetched = 0;
+    allTxs = [];
+    // --- Blockscout API (rich data) ---
+    try {
+      const [info, counters] = await Promise.all([
+        getJson(`${API}/addresses/${addr}`),
+        getJson(`${API}/addresses/${addr}/counters`)
+      ]);
+      gotApi = true;
+      txCount = parseInt(counters.transactions_count || "0");
+      tokenTransfers = parseInt(counters.token_transfers_count || "0");
+      balance = info.coin_balance ? Number(info.coin_balance) / 1e18 : 0;
+
+      // paginate up to 3 pages (150 txs) for heatmap + analysis
+      let items = [], pageParams = null;
+      for (let p = 0; p < 3; p++) {
+        let url = `${API}/addresses/${addr}/transactions`;
+        if (pageParams) url += "?" + new URLSearchParams(pageParams).toString();
+        const page = await getJson(url);
+        items = items.concat(page.items || []);
+        if (!page.next_page_params) break;
+        pageParams = page.next_page_params;
+      }
+      fetched = items.length;
+      allTxs = items.map(t => ({
+        hash: t.hash || "",
+        date: t.timestamp ? new Date(t.timestamp).toISOString() : "",
+        from: t.from && t.from.hash ? t.from.hash : "",
+        to: t.to && t.to.hash ? t.to.hash : (t.to === null ? "(contract creation)" : ""),
+        method: t.method || "",
+        valueUSDC: t.value ? (Number(t.value) / 1e18).toFixed(6) : "0",
+        status: t.status || ""
+      }));
+
+      const stamps = items.map(t => new Date(t.timestamp).getTime()).filter(Boolean);
+      allStamps = stamps;
+      if (stamps.length) {
+        const newest = Math.max(...stamps), oldest = Math.min(...stamps);
+        lastDays = Math.floor((Date.now() - newest) / 86400000);
+        ageDays = Math.max(1, Math.floor((Date.now() - oldest) / 86400000));
+      }
+      const tos = new Set(), mset = new Set();
+      for (const t of items) {
+        const isOut = t.from && t.from.hash && t.from.hash.toLowerCase() === addr.toLowerCase();
+        if (!isOut) continue;
+        if (t.to && t.to.is_contract) tos.add(t.to.hash.toLowerCase());
+        if (!t.to) deployed = true;
+        if (t.method) mset.add(String(t.method).toLowerCase());
+        if ((t.transaction_types || t.tx_types || []).includes("contract_creation")) deployed = true;
+      }
+      distinct = tos.size; methods = mset.size;
+
+      // action signals from method names
+      const has = (...keys) => [...mset].some(m => keys.some(k => m.includes(k)));
+      didSwap = has("swap", "exactinput", "exactoutput", "trade");
+      didBridge = has("bridge", "depositfor", "sendmessage", "relay", "cctp", "burnlocked");
+      didMint = has("mint", "claim");
+      didRegister = has("register", "setname", "commit");
+
+      // NFT / domain holdings
+      try {
+        const nft = await getJson(`${API}/addresses/${addr}/tokens?type=ERC-721`);
+        nftCount = (nft.items || []).length;
+      } catch (_) { nftCount = 0; }
+    } catch (e) {
+      // --- RPC fallback (basic data) ---
+      const [cnt, bal] = await Promise.all([
+        rpcCall("eth_getTransactionCount", [addr, "latest"]),
+        rpcCall("eth_getBalance", [addr, "latest"])
+      ]);
+      if (cnt == null) throw new Error("RPC unreachable");
+      txCount = parseInt(cnt, 16);
+      balance = parseInt(bal, 16) / 1e18;
+      setStatus("Explorer API unavailable — showing basic RPC data.", false);
+    }
+
+    // --- Score ---
+    let score = 0;
+    score += Math.min(24, txCount * 1.2);                          // volume
+    score += Math.min(12, ageDays * 0.5);                          // age
+    if (lastDays !== null) score += lastDays <= 3 ? 10 : lastDays <= 7 ? 7 : lastDays <= 30 ? 3 : 0; // recency
+    score += Math.min(12, distinct * 2.5);                         // diversity
+    score += Math.min(7, tokenTransfers * 0.7);                    // tokens
+    if (deployed) score += 8;                                      // builder
+    if (balance > 0.5) score += 4;                                 // funded
+    score += Math.min(4, methods);                                 // method variety
+    if (didSwap) score += 5;                                       // swap user
+    if (didBridge) score += 5;                                     // bridge user
+    if (didMint) score += 3;                                       // mint/claim
+    if (didRegister || nftCount > 0) score += 6;                   // domain/NFT holder
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    const tier = score >= 80 ? ["⚡ Power User", "#19e3b1"]
+              : score >= 55 ? ["🔵 Active", "#25c2ff"]
+              : score >= 30 ? ["🟡 Casual", "#ffc24d"]
+              : ["🌱 Newcomer", "#7d93aa"];
+
+    // --- Sub-scores (0-100 each) ---
+    const activeDays = new Set(allStamps.map(s => Math.floor(s / 86400000))).size;
+    const subs = [
+      { name: "💵 USDC Activity", tip: "tx volume · token transfers · balance",
+        val: Math.min(100, Math.round(Math.min(50, txCount * 2) + Math.min(35, tokenTransfers * 3.5) + (balance > 0.5 ? 15 : 0))) },
+      { name: "📅 Consistency", tip: "wallet age · recency · active days",
+        val: Math.min(100, Math.round(Math.min(35, ageDays * 1.2) + (lastDays !== null ? (lastDays <= 3 ? 30 : lastDays <= 7 ? 20 : lastDays <= 30 ? 8 : 0) : 0) + Math.min(35, activeDays * 3))) },
+      { name: "🧩 Diversity", tip: "contracts · methods · swap/bridge/mint",
+        val: Math.min(100, Math.round(Math.min(40, distinct * 8) + Math.min(24, methods * 4) + (didSwap ? 12 : 0) + (didBridge ? 12 : 0) + (didMint ? 12 : 0))) },
+      { name: "🛠 Builder Signal", tip: "contract deploy · domain/NFT identity",
+        val: Math.min(100, (deployed ? 60 : 0) + (didRegister ? 20 : 0) + (nftCount > 0 ? 20 : 0)) }
+    ];
+    const sbColor = v => v >= 70 ? "#19e3b1" : v >= 40 ? "#25c2ff" : v >= 15 ? "#ffc24d" : "#7d93aa";
+    $("subBars").innerHTML = subs.map(s => `
+      <div class="sb">
+        <div class="lbl"><b>${s.name}</b><span style="color:${sbColor(s.val)}">${s.val}/100</span></div>
+        <div class="track"><div class="fill" style="width:${s.val}%;background:${sbColor(s.val)}"></div></div>
+        <div style="font-size:10px;color:var(--mut);margin-top:2px;">${s.tip}</div>
+      </div>`).join("");
+    $("subscores").classList.toggle("hidden", !gotApi);
+    lastSubs = subs;
+
+    // --- Render ---
+    $("scoreNum").textContent = score;
+    $("arc").style.strokeDashoffset = (CIRC - CIRC * score / 100).toFixed(1);
+    const tEl = $("tier"); tEl.textContent = tier[0];
+    tEl.style.background = tier[1] + "22"; tEl.style.color = tier[1];
+
+    $("mTx").textContent = txCount;
+    $("mAge").textContent = gotApi ? ageDays : "—";
+    $("mLast").textContent = lastDays === null ? "—" : lastDays;
+    $("mCp").textContent = gotApi ? distinct : "—";
+    $("mTok").textContent = gotApi ? tokenTransfers : "—";
+    $("mBal").textContent = balance.toFixed(2);
+
+    // --- Checklist ---
+    const cl = [];
+    const item = (state, title, tip) => cl.push({ state, title, tip });
+    item(txCount >= 25 ? "ok" : txCount >= 5 ? "part" : "miss",
+      `Transaction volume — ${txCount} txs`,
+      txCount >= 25 ? "Solid onchain footprint." : "Aim for 25+ total transactions. Tools like ArcVote make this easy.");
+    if (gotApi) {
+      item(lastDays !== null && lastDays <= 7 ? "ok" : "miss",
+        lastDays === null ? "No recent activity found" : `Recency — last tx ${lastDays} day(s) ago`,
+        "Projects love consistent wallets. Try to transact at least weekly.");
+      item(distinct >= 5 ? "ok" : distinct >= 2 ? "part" : "miss",
+        `Contract diversity — ${distinct} distinct contracts`,
+        "Interact with 5+ different dApps/contracts, not just one.");
+      item(tokenTransfers > 0 ? "ok" : "miss",
+        `Token transfers — ${tokenTransfers}`,
+        "Move some test tokens around (USDC/EURC) to show asset usage.");
+      item(deployed ? "ok" : "miss",
+        deployed ? "Contract deployed — builder signal ✓" : "No contract deployed",
+        "Deploying even a simple contract is the strongest 'builder' signal a wallet can have.");
+      item(ageDays >= 30 ? "ok" : ageDays >= 7 ? "part" : "miss",
+        `Wallet age — ${ageDays} day(s)`,
+        "Older wallets read as genuine users, not last-minute farmers. Keep the streak alive.");
+      item(didSwap ? "ok" : "miss",
+        didSwap ? "Swap activity detected ✓" : "No swap activity",
+        "Use a DEX/FX swap on Arc at least once — swaps are a classic airdrop signal.");
+      item(didBridge ? "ok" : "miss",
+        didBridge ? "Bridge activity detected ✓" : "No bridge activity",
+        "Bridge assets in/out (e.g. CCTP / thirdweb bridge) to show cross-chain usage.");
+      item(didMint ? "ok" : "miss",
+        didMint ? "Mint/claim activity detected ✓" : "No mint or claim activity",
+        "Mint an NFT (OmniHub) or claim from a faucet/dApp to diversify your actions.");
+      item(nftCount > 0 || didRegister ? "ok" : "miss",
+        nftCount > 0 ? `NFT / domain holder — ${nftCount} collection(s) ✓` : "No NFT or Arc name found",
+        "Register an Arc name (InfinityName) or hold an NFT — identity signals score well.");
+    }
+    item(balance >= 1 ? "ok" : "miss",
+      `Gas balance — ${balance.toFixed(2)} USDC`,
+      "Keep some test USDC from faucet.circle.com so you never miss a tx.");
+
+    $("checklist").innerHTML = cl.map(c => `
+      <li class="${c.state}">
+        <span class="ico">${c.state === "ok" ? "✅" : c.state === "part" ? "🟡" : "❌"}</span>
+        <div>${c.title}<small>${c.tip}</small></div>
+      </li>`).join("");
+
+    lastResult = { addr, score, tier: tier[0], tierColor: tier[1], txCount, ageDays, lastDays, distinct, tokenTransfers, balance };
+    ["result","missing","simulator"].forEach(id => $(id).classList.remove("hidden"));
+    if (gotApi) {
+      renderHeatmap(allStamps, fetched, txCount);
+      $("heatmapCard").classList.remove("hidden");
+    } else {
+      $("heatmapCard").classList.add("hidden");
+    }
+    setStatus(gotApi ? "" : $("status").textContent);
+    simulate();
+  } catch (e) {
+    setStatus("Could not fetch data: " + (e.message || e), true);
+  }
+  $("checkBtn").disabled = false;
+}
+
+function simulate() {
+  const fdv = +$("fdv").value, pct = +$("pct").value, wal = +$("wal").value;
+  $("fdvVal").textContent = "$" + (fdv >= 1000 ? (fdv/1000).toFixed(1) + "B" : fdv + "M");
+  $("pctVal").textContent = pct + "%";
+  $("walVal").textContent = wal + "K";
+  if (!lastResult) return;
+  const pool = fdv * 1e6 * pct / 100;
+  const avgPerWallet = pool / (wal * 1000);
+  // weight: score 50 = average wallet; capped multiplier 0.2x–3x
+  const mult = Math.min(3, Math.max(0.2, lastResult.score / 50));
+  const est = avgPerWallet * mult;
+  $("simOut").textContent = "$" + est.toLocaleString("en-US", { maximumFractionDigits: 0 }) +
+    "  (" + mult.toFixed(1) + "× avg)";
+}
+
+function renderHeatmap(stamps, fetched, total) {
+  const days = 84; // 12 weeks
+  const counts = new Array(days).fill(0);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const start = now.getTime() - (days - 1) * 86400000;
+  for (const s of stamps) {
+    if (s < start) continue;
+    const idx = Math.floor((s - start) / 86400000);
+    if (idx >= 0 && idx < days) counts[idx]++;
+  }
+  const max = Math.max(1, ...counts);
+  const color = n => n === 0 ? "#0f1c2c" : n <= max * 0.33 ? "#0e3a55" : n <= max * 0.66 ? "#0d6d6e" : "#19e3b1";
+  let html = "";
+  for (let w = 0; w < 12; w++) {
+    html += "<div>";
+    for (let d = 0; d < 7; d++) {
+      const i = w * 7 + d;
+      const date = new Date(start + i * 86400000);
+      html += `<span class="d" title="${date.toISOString().slice(0,10)} · ${counts[i]} tx" style="background:${color(counts[i])}"></span>`;
+    }
+    html += "</div>";
+  }
+  $("heatmap").innerHTML = html;
+  $("hmNote").textContent = fetched < total ? `based on latest ${fetched} of ${total} txs` : `${total} txs`;
+}
+
+function downloadCard() {
+  if (!lastResult) return;
+  const r = lastResult;
+  const c = document.createElement("canvas");
+  c.width = 1000; c.height = 540;
+  const x = c.getContext("2d");
+
+  // background
+  const bg = x.createLinearGradient(0, 0, 1000, 540);
+  bg.addColorStop(0, "#071321"); bg.addColorStop(1, "#06231d");
+  x.fillStyle = bg; x.fillRect(0, 0, 1000, 540);
+  x.strokeStyle = "#1b2a3d"; x.lineWidth = 4; x.strokeRect(2, 2, 996, 536);
+
+  // title
+  x.fillStyle = "#e8f0f8"; x.font = "bold 38px Segoe UI, sans-serif";
+  x.fillText("Arc Wallet Check", 50, 75);
+  x.fillStyle = "#7d93aa"; x.font = "20px Segoe UI, sans-serif";
+  x.fillText("Arc Testnet · Chain 5042002", 50, 108);
+
+  // score ring
+  const cx = 200, cy = 320, rad = 110;
+  x.lineWidth = 26; x.strokeStyle = "#15243a";
+  x.beginPath(); x.arc(cx, cy, rad, 0, Math.PI * 2); x.stroke();
+  const grad = x.createLinearGradient(cx - rad, cy - rad, cx + rad, cy + rad);
+  grad.addColorStop(0, "#25c2ff"); grad.addColorStop(1, "#19e3b1");
+  x.strokeStyle = grad; x.lineCap = "round";
+  x.beginPath(); x.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * r.score / 100); x.stroke();
+  x.fillStyle = "#e8f0f8"; x.font = "bold 72px Segoe UI, sans-serif"; x.textAlign = "center";
+  x.fillText(r.score, cx, cy + 18);
+  x.fillStyle = "#7d93aa"; x.font = "22px Segoe UI, sans-serif";
+  x.fillText("/ 100", cx, cy + 52);
+  x.fillStyle = r.tierColor; x.font = "bold 26px Segoe UI, sans-serif";
+  x.fillText(r.tier, cx, cy + rad + 50);
+  x.textAlign = "left";
+
+  // metrics
+  const rows = [
+    ["Transactions", r.txCount],
+    ["Wallet age", r.ageDays + " days"],
+    ["Last activity", r.lastDays === null ? "—" : r.lastDays + "d ago"],
+    ["Distinct contracts", r.distinct],
+    ["Token transfers", r.tokenTransfers],
+  ];
+  let y = 200;
+  for (const [k, v] of rows) {
+    x.fillStyle = "#7d93aa"; x.font = "22px Segoe UI, sans-serif"; x.fillText(k, 480, y);
+    x.fillStyle = "#e8f0f8"; x.font = "bold 26px Segoe UI, sans-serif"; x.fillText(String(v), 760, y);
+    y += 56;
+  }
+
+  // footer
+  x.fillStyle = "#7d93aa"; x.font = "19px monospace";
+  x.fillText(r.addr.slice(0, 10) + "…" + r.addr.slice(-8), 50, 500);
+  x.fillStyle = "#25c2ff"; x.font = "19px Segoe UI, sans-serif";
+  x.fillText("built by @Dnyelfy", 760, 500);
+
+  const a = document.createElement("a");
+  a.download = "arc-wallet-score.png";
+  a.href = c.toDataURL("image/png");
+  a.click();
+}
+
+const ARC_CHAIN_HEX = "0x4cef52"; // 5042002
+async function stampOnChain() {
+  if (!lastResult) return;
+  if (!window.ethereum) { setStatus("MetaMask not found.", true); return; }
+  try {
+    const [from] = await window.ethereum.request({ method: "eth_requestAccounts" });
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: ARC_CHAIN_HEX }] });
+    } catch (e) {
+      if (e && e.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: ARC_CHAIN_HEX, chainName: "Arc Testnet",
+            nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+            rpcUrls: [RPC], blockExplorerUrls: ["https://testnet.arcscan.app"]
+          }]
+        });
+      } else { throw e; }
+    }
+    const msg = `ArcWalletCheck|score=${lastResult.score}|tier=${lastResult.tier.replace(/[^A-Za-z ]/g, "").trim()}|${new Date().toISOString().slice(0,10)}`;
+    const data = "0x" + Array.from(new TextEncoder().encode(msg)).map(b => b.toString(16).padStart(2, "0")).join("");
+    setStatus("Confirm the transaction in MetaMask…");
+    const hash = await window.ethereum.request({
+      method: "eth_sendTransaction",
+      params: [{ from, to: from, value: "0x0", data }]
+    });
+    setStatus("Score stamped on-chain ⛓ ");
+    const s = $("status");
+    const a = document.createElement("a");
+    a.href = "https://testnet.arcscan.app/tx/" + hash; a.target = "_blank"; a.rel = "noreferrer";
+    a.textContent = "view tx ↗"; a.style.color = "var(--acc)";
+    s.appendChild(a);
+  } catch (e) {
+    setStatus("Stamp failed: " + (e && e.message ? e.message : e), true);
+  }
+}
+
+function shareX() {
+  if (!lastResult) return;
+  const txt = `My Arc Testnet wallet score: ${lastResult.score}/100 ${lastResult.tier}\n\nCheck yours 👇 built on @arc by @Dnyelfy\n${location.origin + location.pathname}`;
+  window.open("https://twitter.com/intent/tweet?text=" + encodeURIComponent(txt), "_blank");
+}
+
+function copyCard() {
+  if (!lastResult) return;
+  navigator.clipboard.writeText(
+    `Arc Wallet Check\nAddress: ${lastResult.addr}\nScore: ${lastResult.score}/100 — ${lastResult.tier}\nTxs: ${lastResult.txCount}\n${location.href}`
+  ).then(() => setStatus("Copied!"));
+}
+
+$("addr").addEventListener("keydown", e => { if (e.key === "Enter") runCheck(); });
+</script>
+</body>
+</html>
